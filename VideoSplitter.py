@@ -1,23 +1,31 @@
 """
 VideoSplitter.py
 
-This script splits a video file into multiple chapters based on timestamps and titles provided in a separate text file.
+A command-line tool to split a video file into multiple chapter-based segments using ffmpeg.
+Chapters are defined by a text file containing timestamps and titles.
+
+Features:
+    - Splits a video into chapters based on a chapters file.
+    - Accepts command-line arguments for video file, chapters file, and output directory.
+    - If arguments are not provided, prompts the user interactively.
+    - Output files are named as "<chapter_number>. <chapter_title>.mp4" in the specified directory.
 
 Usage:
-    1. Place the video file (e.g., 'welcome.mp4') in the same directory as this script.
-    2. Create a 'chapters.txt' file where each line contains a timestamp and a chapter title, separated by a space.
-       Example line: 
-            00:00:00 Welcome
-            00:01:23 Introduction
+    Command-line:
+        python VideoSplitter.py -v <video_file> -c <chapters_file> -o <output_directory>
+    Interactive (if arguments are omitted):
+        python VideoSplitter.py
+        # The script will prompt for missing parameters.
 
-How it works:
-    - Reads chapter timestamps and titles from 'chapters.txt'.
-    - Splits 'welcome.mp4' into separate video files for each chapter using ffmpeg.
-    - Output files are named as "<chapter_number>. <chapter_title>.mp4".
+Chapters file format:
+    Each line should contain a timestamp and a chapter title, separated by a space.
+    Example:
+        00:00:00 Welcome
+        00:01:23 Introduction
 
 Dependencies:
-    - ffmpeg (Python package)
-    - ffmpeg must be installed and available in your system PATH. (The app needs to be installed)
+    - ffmpeg (Python package: pip install ffmpeg-python)
+    - ffmpeg must be installed and available in your system PATH.
 
 Author: Syfur Rahman
 Date: 16.05.25
@@ -25,10 +33,10 @@ Date: 16.05.25
 """
 
 
-
+import os
 import ffmpeg
+import argparse
 
-inputVideo = ffmpeg.input("welcome.mp4")
 timestamps = [] 
 titles = []
 
@@ -42,17 +50,49 @@ def readChapters(chaptersFile):
             titles.append(chapterTitle)
 
 
-readChapters("chapters.txt")
+def split_video(videoFile, chaptersFile, outputDir):
+    timestamps.clear()
+    titles.clear()
+    readChapters(chaptersFile)
+
+    if outputDir:
+        os.makedirs(outputDir, exist_ok=True)
+
+    for chapter in range(len(timestamps)):
+        outTitle = f"{chapter+1}. {titles[chapter]}.mp4"
+        if outputDir:
+            outTitle = f"{outputDir}/{outTitle}"
+
+        if chapter == len(timestamps)-1:
+            stream = ffmpeg.input(videoFile, ss = timestamps[chapter]).output(outTitle)
+        else:
+            stream = ffmpeg.input(videoFile, ss = timestamps[chapter], to = timestamps[chapter+1]).output(outTitle)
+        ffmpeg.run(stream)
 
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="Split a video into chapters using timestamps and titles from a text file."
+    )
+    parser.add_argument('-v', '--video', help='Path to the video file')
+    parser.add_argument('-c', '--chapters', help='Path to the chapters file')
+    parser.add_argument('-o', '--output', help='Output directory for split videos')
 
-for chapter in range(len(timestamps)):
-    inTitle = "welcome.mp4"
-    outTitle = f"{chapter}. {titles[chapter]}.mp4"
-    if chapter == len(timestamps)-1:
-        stream = ffmpeg.input(inTitle, ss = timestamps[chapter]).output(outTitle)
-    else:
-        stream = ffmpeg.input(inTitle, ss = timestamps[chapter], to = timestamps[chapter+1]).output(outTitle)
-    ffmpeg.run(stream)
+    args = parser.parse_args()
+
+    videoFile = args.video
+    chaptersFile = args.chapters
+    outputDir = args.output
+
+    if not videoFile:
+        videoFile = input("Location of Video File: ").strip()
+    if not chaptersFile:
+        chaptersFile = input("Location of Chapters File: ").strip()
+    if not outputDir:
+        outputDir = input("Output Directory: ").strip()
+
+    split_video(videoFile, chaptersFile, outputDir)
 
 
+if __name__ == "__main__":
+    main()
