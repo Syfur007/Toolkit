@@ -29,31 +29,31 @@ Dependencies:
 
 Author: Syfur Rahman
 Date: 16.05.25
-
 """
-
 
 import os
 import ffmpeg
 import argparse
 
-timestamps = [] 
-titles = []
-
-
 def readChapters(chaptersFile):
+    timestamps = []
+    titles = []
     with open(chaptersFile) as allChapters:
         lines = allChapters.readlines()
         for line in lines:
             time, chapterTitle = line.strip().split(" ", 1)
             timestamps.append(time)
             titles.append(chapterTitle)
+    return timestamps, titles
+
+
+def timeStampConvert(timestamp):
+    units = list(map(int, timestamp.strip().split(":")))
+    return units[0]*3600 + units[1]*60 + units[2]
 
 
 def split_video(videoFile, chaptersFile, outputDir):
-    timestamps.clear()
-    titles.clear()
-    readChapters(chaptersFile)
+    timestamps, titles = readChapters(chaptersFile)
 
     if outputDir:
         os.makedirs(outputDir, exist_ok=True)
@@ -61,9 +61,25 @@ def split_video(videoFile, chaptersFile, outputDir):
     for chapter in range(len(timestamps)):
         outTitle = f"{chapter+1}. {titles[chapter]}.mp4"
         if outputDir:
-            outTitle = f"{outputDir}/{outTitle}"
+            outTitle = os.path.join(outputDir, outTitle)
 
-        if chapter == len(timestamps)-1:
+        isLastChapter = chapter == len(timestamps)-1
+
+        if os.path.exists(outTitle) :
+            outmeta = ffmpeg.probe(outTitle)
+            currentDuration = float(outmeta['format']['duration'])
+
+            if isLastChapter:
+                inmeta = ffmpeg.probe(videoFile)
+                originalDuration = float(inmeta['format']['duration']) - timeStampConvert(timestamps[chapter])
+            else:
+                originalDuration = timeStampConvert(timestamps[chapter+1]) - timeStampConvert(timestamps[chapter])
+            
+            if abs(originalDuration - currentDuration) < 1:
+                print(f"{titles[chapter]} already exists!")
+                continue
+
+        if isLastChapter:
             stream = ffmpeg.input(videoFile, ss = timestamps[chapter]).output(outTitle)
         else:
             stream = ffmpeg.input(videoFile, ss = timestamps[chapter], to = timestamps[chapter+1]).output(outTitle)
