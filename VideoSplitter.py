@@ -9,7 +9,8 @@ Features:
     - Accepts command-line arguments for video file, chapters file, and output directory.
     - If arguments are not provided, prompts the user interactively.
     - Output files are named as "<chapter_number>. <chapter_title>.mp4" in the specified directory.
-
+    - Check Integrity of a split by providing an -i or --integrity flag
+    
 Usage:
     Command-line:
         python VideoSplitter.py -v <video_file> -c <chapters_file> -o <output_directory>
@@ -54,6 +55,7 @@ def timeStampConvert(timestamp):
 
 def split_video(videoFile, chaptersFile, outputDir):
     timestamps, titles = readChapters(chaptersFile)
+    videoDuration = float(ffmpeg.probe(videoFile)['format']['duration'])
 
     if outputDir:
         os.makedirs(outputDir, exist_ok=True)
@@ -70,8 +72,7 @@ def split_video(videoFile, chaptersFile, outputDir):
             currentDuration = float(outmeta['format']['duration'])
 
             if isLastChapter:
-                inmeta = ffmpeg.probe(videoFile)
-                originalDuration = float(inmeta['format']['duration']) - timeStampConvert(timestamps[chapter])
+                originalDuration = videoDuration - timeStampConvert(timestamps[chapter])
             else:
                 originalDuration = timeStampConvert(timestamps[chapter+1]) - timeStampConvert(timestamps[chapter])
             
@@ -86,6 +87,32 @@ def split_video(videoFile, chaptersFile, outputDir):
         ffmpeg.run(stream)
 
 
+def integrity_check(videoFile, chaptersFile, outputDir):
+    timestamps, titles = readChapters(chaptersFile)
+    videoDuration = float(ffmpeg.probe(videoFile)['format']['duration'])
+    chaptersDuration = 0.0
+
+    print("Running Integrity check...")
+
+    for chapter in range(len(timestamps)):
+        chapterFile = f"{chapter+1}. {titles[chapter]}.mp4"
+        if outputDir:
+            chapterFile = os.path.join(outputDir, chapterFile)
+
+        isLastChapter = chapter == len(timestamps)-1
+
+        if os.path.exists(chapterFile):
+            chaptersDuration += float(ffmpeg.probe(chapterFile)['format']['duration'])
+
+    if abs(videoDuration - chaptersDuration) > 1:
+        print("Video Length Mismatch!")
+        print(f"Original Video Duration: {videoDuration}")
+        print(f"Total Chapters Duration: {chaptersDuration}")
+        return False
+    else:
+        print("Split is performed Successfully!")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Split a video into chapters using timestamps and titles from a text file."
@@ -93,6 +120,7 @@ def main():
     parser.add_argument('-v', '--video', help='Path to the video file')
     parser.add_argument('-c', '--chapters', help='Path to the chapters file')
     parser.add_argument('-o', '--output', help='Output directory for split videos')
+    parser.add_argument('-i', '--integrity', action='store_true', help='Only check integrity, do not split video')
 
     args = parser.parse_args()
 
@@ -107,7 +135,10 @@ def main():
     if not outputDir:
         outputDir = input("Output Directory: ").strip()
 
-    split_video(videoFile, chaptersFile, outputDir)
+    if not args.integrity:
+        split_video(videoFile, chaptersFile, outputDir)
+        
+    integrity_check(videoFile, chaptersFile, outputDir)
 
 
 if __name__ == "__main__":
